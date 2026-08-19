@@ -5,8 +5,7 @@ import uuid
 import requests
 import nest_asyncio
 import threading
-import asyncio
-from flask import Flask
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ChatMemberHandler, filters, ContextTypes
 import yt_dlp
@@ -140,18 +139,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 
                 author = info.get('uploader') or info.get('channel') or "غير معروف"
 
-                # الوصف مع الرمز المتحرك
                 caption = (
                     f"<tg-emoji emoji-id=\"5116113383128564448\">✨</tg-emoji>  الاسم  <tg-emoji emoji-id=\"5346230992044574063\">✨</tg-emoji>  {author}\n"
                     f"<tg-emoji emoji-id=\"5116113383128564448\">✨</tg-emoji>  الوصف  <tg-emoji emoji-id=\"5346230992044574063\">✨</tg-emoji>  {title}"
                 )
                 
-                # --- كود زر تحميل الصوت للانستا ---
                 ig_id = info.get('id', uuid.uuid4().hex[:8])
                 context.bot_data[f"igaudio_{ig_id}"] = clean_url
                 keyboard = [[InlineKeyboardButton("تحميل الصوت", callback_data=f"igaudio_{ig_id}")]]
                 reply_markup = InlineKeyboardMarkup(keyboard)
-                # ----------------------------------
 
                 await update.message.reply_video(
                     video=open(file_name, 'rb'),
@@ -189,7 +185,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         title = data.get("title", "بدون عنوان")
         author = data.get("author", {}).get("nickname", "غير معروف")
 
-        # الوصف مع الرمز المتحرك
         caption = (
             f"<tg-emoji emoji-id=\"5116113383128564448\">✨</tg-emoji>  الاسم  <tg-emoji emoji-id=\"5346230992044574063\">✨</tg-emoji>  {author}\n"
             f"<tg-emoji emoji-id=\"5116113383128564448\">✨</tg-emoji>  الوصف  <tg-emoji emoji-id=\"5346230992044574063\">✨</tg-emoji>  {title}"
@@ -220,7 +215,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer("الان احملك الصوت يحب")
     
-    # ================= قسم استخراج الصوت للانستقرام =================
     if query.data.startswith("igaudio_"):
         ig_url = context.bot_data.get(query.data)
         if not ig_url:
@@ -252,7 +246,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if os.path.exists(final_audio): os.remove(final_audio)
         return
 
-    # ================= قسم استخراج الصوت للتيك توك =================
     elif query.data.startswith("tkaudio_"):
         music_url = context.bot_data.get(query.data)
         if not music_url:
@@ -278,29 +271,35 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text("حدث خطأ أثناء تحميل الصوت.")
             if os.path.exists(tk_audio_name): os.remove(tk_audio_name)
 
-# ================= تشغيل البوت =================
-app_bot = ApplicationBuilder().token(TOKEN).build()
+# ================= إعداد السيرفر الوهمي الخفيف =================
+class DummyHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain; charset=utf-8')
+        self.end_headers()
+        self.wfile.write("البوت شغال 100%!".encode('utf-8'))
+    
+    # تعطيل طباعة الطلبات عشان ما تزعجنا في شاشة الأوامر
+    def log_message(self, format, *args):
+        pass
 
-app_bot.add_handler(CommandHandler("start", start))
-app_bot.add_handler(ChatMemberHandler(track_bot_joins, ChatMemberHandler.MY_CHAT_MEMBER))
-app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-app_bot.add_handler(CallbackQueryHandler(handle_callback))
-
-web_app = Flask(__name__)
-
-@web_app.route('/')
-def home():
-    return "البوت شغال 100%!"
-
-def run_bot():
-    print("تم تشغيل البوت بنجاح لدعم تيك توك وإنستقرام 🚀")
-    asyncio.set_event_loop(asyncio.new_event_loop())
-    app_bot.run_polling()
+def run_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(('0.0.0.0', port), DummyHandler)
+    server.serve_forever()
 
 if __name__ == "__main__":
-    # تشغيل البوت في مسار منفصل
-    threading.Thread(target=run_bot, daemon=True).start()
+    # 1. نشغل السيرفر الوهمي في الخلفية (صامت وبدون مشاكل)
+    threading.Thread(target=run_server, daemon=True).start()
     
-    # تشغيل السيرفر الوهمي عشان Render ما يوقف البوت
-    port = int(os.environ.get("PORT", 10000))
-    web_app.run(host="0.0.0.0", port=port)
+    # 2. نشغل البوت في الواجهة الأساسية بكل صلاحياته
+    print("تم تشغيل البوت بنجاح لدعم تيك توك وإنستقرام 🚀")
+    app_bot = ApplicationBuilder().token(TOKEN).build()
+    
+    app_bot.add_handler(CommandHandler("start", start))
+    app_bot.add_handler(ChatMemberHandler(track_bot_joins, ChatMemberHandler.MY_CHAT_MEMBER))
+    app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app_bot.add_handler(CallbackQueryHandler(handle_callback))
+    
+    # البوت الحين يشتغل كأنه في كولاب بالضبط
+    app_bot.run_polling()
