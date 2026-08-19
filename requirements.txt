@@ -1,5 +1,4 @@
-pyTelegramBotAPI
-pyrogram
-tgcrypto
-nest_asyncio
+requests
+nest-asyncio
 python-telegram-bot
+yt-dlp
