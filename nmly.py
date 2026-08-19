@@ -4,6 +4,9 @@ import json
 import uuid
 import requests
 import nest_asyncio
+import threading
+import asyncio
+from flask import Flask
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ChatMemberHandler, filters, ContextTypes
 import yt_dlp
@@ -238,8 +241,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_audio(
                 audio=open(final_audio, 'rb'),
                 caption="جبت لك الصوتيه ياروحي",
-                title="هذا صوت المقطع",      # تغيير اسم المقطع من الداخل
-                filename="هذا صوت المقطع.mp3", # تغيير اسم الملف
+                title="هذا صوت المقطع",     
+                filename="هذا صوت المقطع.mp3", 
                 reply_to_message_id=query.message.message_id
             )
             os.remove(final_audio)
@@ -250,14 +253,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # ================= قسم استخراج الصوت للتيك توك =================
-    # ================= قسم استخراج الصوت للتيك توك =================
     elif query.data.startswith("tkaudio_"):
         music_url = context.bot_data.get(query.data)
         if not music_url:
             return await query.message.reply_text("عذرا، انتهت صلاحية هذا الصوت. أرسل الرابط مرة أخرى.")
 
         try:
-            # تحميل الصوت محلياً عشان نجبر تليجرام يغير اسمه
             audio_req = requests.get(music_url)
             tk_audio_name = f"tk_{uuid.uuid4().hex}.mp3"
             
@@ -267,8 +268,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_audio(
                 audio=open(tk_audio_name, 'rb'),
                 caption="جبت لك الصوتيه ياروحي",
-                title="هذا صوت المقطع",      # تغيير اسم المقطع من الداخل
-                filename="هذا صوت المقطع.mp3", # تغيير اسم الملف الخارجي
+                title="هذا صوت المقطع",     
+                filename="هذا صوت المقطع.mp3", 
                 reply_to_message_id=query.message.message_id
             )
             os.remove(tk_audio_name)
@@ -278,12 +279,28 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if os.path.exists(tk_audio_name): os.remove(tk_audio_name)
 
 # ================= تشغيل البوت =================
-app = ApplicationBuilder().token(TOKEN).build()
+app_bot = ApplicationBuilder().token(TOKEN).build()
 
-app.add_handler(CommandHandler("start", start))
-app.add_handler(ChatMemberHandler(track_bot_joins, ChatMemberHandler.MY_CHAT_MEMBER))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-app.add_handler(CallbackQueryHandler(handle_callback))
+app_bot.add_handler(CommandHandler("start", start))
+app_bot.add_handler(ChatMemberHandler(track_bot_joins, ChatMemberHandler.MY_CHAT_MEMBER))
+app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+app_bot.add_handler(CallbackQueryHandler(handle_callback))
 
-print("تم تشغيل البوت بنجاح لدعم تيك توك وإنستقرام 🚀")
-app.run_polling()
+web_app = Flask(__name__)
+
+@web_app.route('/')
+def home():
+    return "البوت شغال 100%!"
+
+def run_bot():
+    print("تم تشغيل البوت بنجاح لدعم تيك توك وإنستقرام 🚀")
+    asyncio.set_event_loop(asyncio.new_event_loop())
+    app_bot.run_polling()
+
+if __name__ == "__main__":
+    # تشغيل البوت في مسار منفصل
+    threading.Thread(target=run_bot, daemon=True).start()
+    
+    # تشغيل السيرفر الوهمي عشان Render ما يوقف البوت
+    port = int(os.environ.get("PORT", 10000))
+    web_app.run(host="0.0.0.0", port=port)
